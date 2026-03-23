@@ -108,6 +108,35 @@ class APK20Source(APKSource):
         multipliers = {"GB": 1024**3, "MB": 1024**2, "KB": 1024}
         return int(val * multipliers.get(unit, 1))
 
+    def _find_version_code(self, package: str, version: str, html: str) -> str:
+        """Find version code for a specific version name from page data."""
+        # Parse RSC payload for objects with versionCode + versionName
+        for chunk_m in re.finditer(r'self\.__next_f\.push\(\[1,"(.+?)"\]\)', html):
+            chunk = chunk_m.group(1).replace('\\"', '"').replace("\\n", "\n").replace("\\\\", "\\")
+            for obj_m in re.finditer(r'\{[^{}]*"versionCode"\s*:\s*\d+[^{}]*\}', chunk):
+                try:
+                    obj = json.loads(obj_m.group(0))
+                    name = obj.get("versionName", "") or obj.get("version", "")
+                    if name == version:
+                        return str(obj["versionCode"])
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        # Check if the current page version matches
+        info = self._parse_app_page(package, html)
+        if info.version == version:
+            m = re.search(rf'/apk/{re.escape(package)}/download/(\d+)', html)
+            if m:
+                return m.group(1)
+            codes = re.findall(r'"versionCode":\s*(\d+)', html)
+            if codes:
+                return codes[0]
+
+        raise RuntimeError(
+            f"[apk20] Version {version} not found for {package}. "
+            f"Latest available: {info.version or 'unknown'}"
+        )
+
     def download(self, package: str, output_dir: Path, version: str | None = None) -> DownloadResult:
         # Fetch app page once — extract version code + version name
         resp = self.session.get(f"{self.BASE}/apk/{package}", timeout=HTTP_TIMEOUT)
@@ -115,17 +144,21 @@ class APK20Source(APKSource):
             raise RuntimeError(f"[apk20] Package not found: {package}")
         resp.raise_for_status()
 
-        m = re.search(rf'/apk/{re.escape(package)}/download/(\d+)', resp.text)
-        if not m:
-            codes = re.findall(r'"versionCode":\s*(\d+)', resp.text)
-            if not codes:
-                raise RuntimeError(f"[apk20] No versions found for: {package}")
-            version_code = codes[0]
+        if version:
+            version_code = self._find_version_code(package, version, resp.text)
+            ver = version
         else:
-            version_code = m.group(1)
+            m = re.search(rf'/apk/{re.escape(package)}/download/(\d+)', resp.text)
+            if not m:
+                codes = re.findall(r'"versionCode":\s*(\d+)', resp.text)
+                if not codes:
+                    raise RuntimeError(f"[apk20] No versions found for: {package}")
+                version_code = codes[0]
+            else:
+                version_code = m.group(1)
 
-        info = self._parse_app_page(package, resp.text)
-        ver = info.version or "unknown"
+            info = self._parse_app_page(package, resp.text)
+            ver = info.version or "unknown"
 
         # Verify + get download URL
         verify_resp = self.session.get(

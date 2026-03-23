@@ -155,7 +155,16 @@ class APKPureSource(APKSource):
         if not dl_url:
             raise RuntimeError(f"[apkpure] No download URL for: {package}")
 
-        ver = version or detail.get("version_name", "") or "latest"
+        detail_version = detail.get("version_name", "")
+
+        # Validate requested version matches what the API provides
+        if version and detail_version and version != detail_version:
+            raise RuntimeError(
+                f"[apkpure] Version {version} not available. "
+                f"Latest available: {detail_version}"
+            )
+
+        ver = detail_version or "latest"
         file_type = asset.get("type", "APK").lower()
         filename = f"{package}-{ver}.{file_type}"
         out_path = output_dir / filename

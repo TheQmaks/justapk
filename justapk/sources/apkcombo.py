@@ -92,10 +92,20 @@ class APKComboSource(APKSource):
         soup = BeautifulSoup(resp.text, "lxml")
 
         # Get version from page
+        page_version = ""
+        ver_el = soup.select_one(".version")
+        if ver_el:
+            page_version = ver_el.get_text(strip=True)
+
+        # Validate requested version matches what the page provides
+        if version and page_version and version != page_version:
+            raise RuntimeError(
+                f"[apkcombo] Version {version} not available. "
+                f"Latest available: {page_version}"
+            )
+
         if not version:
-            ver_el = soup.select_one(".version")
-            if ver_el:
-                version = ver_el.get_text(strip=True)
+            version = page_version
 
         # Find R2 download links: /r2?u={url_encoded_signed_url}
         dl_url = None

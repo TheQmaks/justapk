@@ -48,22 +48,29 @@ class APKMirrorSource(APKSource):
             ))
         return results
 
-    def _search_app(self, package: str) -> str | None:
-        """Find the latest release page URL for a package."""
+    def _search_app(self, package: str, version: str | None = None) -> str | None:
+        """Find the release page URL for a package, optionally for a specific version."""
+        query = f"{package} {version}" if version else package
         resp = self.session.get(
             f"{self.BASE}/",
-            params={"post_type": "app_listing", "searchtype": "apk", "s": package},
+            params={"post_type": "app_listing", "searchtype": "apk", "s": query},
             timeout=HTTP_TIMEOUT,
         )
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
 
+        best = None
         for row in soup.select(".appRow"):
             a = row.select_one("h5 a[href]")
             if a:
                 href = str(a.get("href", ""))
-                return f"{self.BASE}{href}" if not href.startswith("http") else href
-        return None
+                url = f"{self.BASE}{href}" if not href.startswith("http") else href
+                # If version specified, prefer results containing the version string
+                if version and version in a.get_text(strip=True):
+                    return url
+                if best is None:
+                    best = url
+        return best
 
     def get_info(self, package: str) -> AppInfo | None:
         release_url = self._search_app(package)
@@ -94,8 +101,8 @@ class APKMirrorSource(APKSource):
         )
 
     def download(self, package: str, output_dir: Path, version: str | None = None) -> DownloadResult:
-        # Step 1: Find the release page
-        release_url = self._search_app(package)
+        # Step 1: Find the release page (version-aware search if version specified)
+        release_url = self._search_app(package, version)
         if not release_url:
             raise RuntimeError(f"[apkmirror] Package not found: {package}")
 
@@ -108,14 +115,20 @@ class APKMirrorSource(APKSource):
 
         soup = BeautifulSoup(resp.text, "lxml")
 
-        # Extract version from title
-        ver = version or ""
-        if not ver:
-            h1 = soup.select_one("h1")
-            if h1:
-                m = re.search(r"([\d.]+)", h1.get_text())
-                if m:
-                    ver = m.group(1)
+        # Extract version from page title
+        ver = ""
+        h1 = soup.select_one("h1")
+        if h1:
+            m = re.search(r"([\d.]+)", h1.get_text())
+            if m:
+                ver = m.group(1)
+
+        # Validate version if a specific one was requested
+        if version and ver and ver != version:
+            raise RuntimeError(
+                f"[apkmirror] Version {version} not found for {package}. "
+                f"Latest available: {ver}"
+            )
 
         # Step 2: Find APK variant link (prefer universal)
         variant_url = None
