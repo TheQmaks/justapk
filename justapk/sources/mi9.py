@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 
 from justapk.models import AppInfo, DownloadResult
 from justapk.sources.base import APKSource
-from justapk.utils import HTTP_TIMEOUT, create_cf_session, download_file, sha256_file
+from justapk.utils import HTTP_TIMEOUT, create_session, download_file, sha256_file
 
 _SSE_TIMEOUT = 90
 _ICON_BASE = "https://lh3.googleusercontent.com"
@@ -24,7 +24,7 @@ class MI9Source(APKSource):
     SEARCH_API = "https://search.mi9.com/"
 
     def __init__(self):
-        self.session = create_cf_session()
+        self.session = create_session()
         self.session.headers.update({
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": f"{self.BASE}/apk-downloader",

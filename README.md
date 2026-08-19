@@ -90,7 +90,7 @@ Tried in this order. If one fails, the next one picks up automatically.
 | 4 | **APKMirror** | HTML scraping + `curl_cffi` | Cloudflare bypass |
 | 5 | **Uptodown** | Reverse-engineered mobile API | No Cloudflare |
 | 6 | **APKCombo** | HTML scraping + `curl_cffi` | Cloudflare bypass |
-| 7 | **MI9** | Google Play SSE API + `curl_cffi` | Original Play files, Cloudflare bypass |
+| 7 | **MI9** | Google Play SSE API | Original Play files, no extra deps |
 
 ## Python API
 
