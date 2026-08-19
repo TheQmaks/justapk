@@ -4,7 +4,7 @@
 
 # justapk
 
-**Download any APK by package name. 6 sources, automatic fallback, zero config.**
+**Download any APK by package name. 7 sources, automatic fallback, zero config.**
 
 [![PyPI](https://img.shields.io/pypi/v/justapk?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/justapk/)
 [![Python](https://img.shields.io/pypi/pyversions/justapk?logo=python&logoColor=white)](https://pypi.org/project/justapk/)
@@ -17,7 +17,7 @@
 justapk download org.telegram.messenger
 ```
 
-*One command. Six sources. Always gets the APK.*
+*One command. Seven sources. Always gets the APK.*
 
 </div>
 
@@ -25,7 +25,7 @@ justapk download org.telegram.messenger
 
 ## Why?
 
-Existing APK downloaders break constantly — sites add Cloudflare, change APIs, go offline. **justapk** doesn't care. It cycles through 6 sources automatically until one works. Under the hood it uses reverse-engineered mobile APIs and Cloudflare bypass via TLS fingerprint impersonation.
+Existing APK downloaders break constantly — sites add Cloudflare, change APIs, go offline. **justapk** doesn't care. It cycles through 7 sources automatically until one works. Under the hood it uses reverse-engineered mobile APIs and Cloudflare bypass via TLS fingerprint impersonation.
 
 ## Install
 
@@ -90,6 +90,7 @@ Tried in this order. If one fails, the next one picks up automatically.
 | 4 | **APKMirror** | HTML scraping + `curl_cffi` | Cloudflare bypass |
 | 5 | **Uptodown** | Reverse-engineered mobile API | No Cloudflare |
 | 6 | **APKCombo** | HTML scraping + `curl_cffi` | Cloudflare bypass |
+| 7 | **MI9** | Google Play SSE API | Original Play files, no extra deps |
 
 ## Python API
 
