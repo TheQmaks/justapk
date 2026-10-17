@@ -26,7 +26,7 @@ def convert_xapk_to_apk(xapk_path: Path, output_dir: Path | None = None) -> Path
     """Convert an XAPK (split APK bundle) to a single installable APK.
 
     XAPK is a ZIP archive containing manifest.json + split APKs.
-    Merges base APK with config splits (native libs, assets) and re-signs.
+    Merges base APK with config splits, including resource tables, and re-signs.
     """
     output_dir = output_dir or xapk_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -117,66 +117,39 @@ def _classify_splits(
 def _merge_splits(
     base_apk: Path, config_apks: list[Path], output: Path
 ) -> dict[str, int]:
-    """Merge config splits into base APK.
+    """Merge resource tables and remove split requirements with APKEditor.
 
-    Takes all files from base APK, then overlays files from config splits:
-    - lib/  (native .so libraries — the most important)
-    - assets/
-    - res/  (density/locale resources)
-    - kotlin/, org/ (metadata)
-
-    Skips from splits: AndroidManifest.xml (split-specific),
-    resources.arsc (can't merge resource tables without aapt2), META-INF/.
+    ZIP overlays cannot merge resources.arsc and must never be used as fallback.
+    APKEDITOR_JAR must point to a trusted, independently verified APKEditor jar.
     """
-    files: dict[str, tuple[Path, str]] = {}  # arcname -> (source_apk, original_name)
-
-    # Base APK — everything except META-INF/
-    with zipfile.ZipFile(base_apk, "r") as zf:
-        for name in zf.namelist():
-            if name.startswith("META-INF/"):
-                continue
-            files[name] = (base_apk, name)
-
-    # Config splits — overlay useful files
-    skip_names = {"AndroidManifest.xml", "resources.arsc"}
-    skip_prefixes = ("META-INF/",)
-    added = 0
-
-    for config_apk in config_apks:
-        with zipfile.ZipFile(config_apk, "r") as zf:
-            for name in zf.namelist():
-                if name in skip_names:
-                    continue
-                if any(name.startswith(p) for p in skip_prefixes):
-                    continue
-                if name.endswith("/"):
-                    continue  # directory entries
-                if name not in files:
-                    added += 1
-                files[name] = (config_apk, name)
-
-    # Write merged APK with proper compression
-    with zipfile.ZipFile(output, "w") as out_zf:
-        for arcname in sorted(files):
-            src_apk, orig_name = files[arcname]
-            with zipfile.ZipFile(src_apk, "r") as src_zf:
-                data = src_zf.read(orig_name)
-
-            compress = zipfile.ZIP_STORED if _should_store(arcname) else zipfile.ZIP_DEFLATED
-            info = zipfile.ZipInfo(arcname)
-            info.compress_type = compress
-            out_zf.writestr(info, data)
-
+    jar = Path(os.environ.get("APKEDITOR_JAR", ""))
+    if not jar.is_file():
+        raise RuntimeError("Set APKEDITOR_JAR to a verified APKEditor jar to merge split APKs")
+    if output.exists():
+        raise FileExistsError(output)
+    with tempfile.TemporaryDirectory() as tmp:
+        staging = Path(tmp)
+        inputs = staging / "splits"
+        inputs.mkdir()
+        shutil.copy2(base_apk, inputs / "base.apk")
+        for index, apk in enumerate(config_apks):
+            shutil.copy2(apk, inputs / f"split-{index}.apk")
+        merged = staging / "merged.apk"
+        completed = subprocess.run(
+            ["java", "-jar", str(jar.resolve()), "m", "-i", str(inputs),
+             "-o", str(merged), "-validate-modules"],
+            capture_output=True, text=True, timeout=300,
+        )
+        if completed.returncode or not merged.is_file():
+            raise RuntimeError(f"APKEditor merge failed: {completed.stderr or completed.stdout}")
+        with zipfile.ZipFile(merged) as archive:
+            names = set(archive.namelist())
+            if not {"AndroidManifest.xml", "resources.arsc"} <= names or archive.testzip():
+                raise RuntimeError("APKEditor produced an invalid merged APK")
+        with zipfile.ZipFile(base_apk) as archive:
+            added = len(names - set(archive.namelist()))
+        shutil.copy2(merged, output)
     return {"added": added}
-
-
-def _should_store(filename: str) -> bool:
-    """Files that should be stored (not deflated) in APK."""
-    # Native libs: memory-mapped at runtime
-    if filename.startswith("lib/") and filename.endswith(".so"):
-        return True
-    # Resource table: memory-mapped
-    return filename == "resources.arsc"
 
 
 def _try_sign(apk_path: Path, tmp_dir: Path) -> bool:

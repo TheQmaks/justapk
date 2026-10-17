@@ -117,6 +117,19 @@ if info:
 result = dl.download("org.telegram.messenger", source="apkpure")
 ```
 
+## Split APK conversion
+
+Converting a multi-APK XAPK requires Java and
+[APKEditor](https://github.com/REAndroid/APKEditor). Set `APKEDITOR_JAR` to
+the absolute path of a trusted, checksum-verified jar before running
+`justapk convert` or downloading with automatic conversion.
+
+Tested with APKEditor 1.4.9 (SHA-256
+`a9cd40df818845456be6d696de6110c89edf4b0a0580cb83438ed6b25a366e67`).
+Without the merger, conversion fails rather than producing an incomplete APK.
+Use `--no-convert` to retain the original bundle. ZIP-copying split files is
+not sufficient: resource tables and manifest split requirements must be merged.
+
 ## License
 
 [MIT](LICENSE)
